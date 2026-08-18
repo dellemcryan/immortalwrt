@@ -12,6 +12,19 @@ define Build/an7581-bl31-uboot
   cat $(STAGING_DIR_IMAGE)/an7581_$1-bl31-u-boot.fip >> $@
 endef
 
+# Combined whole-SPI-NAND factory image: bl2 @0x0, bl31+u-boot @0x20000,
+# kernel @0xc0000, ubi rootfs @0x8c0000 (offsets from an758x-nokia_xg-040g-stock-parts.dtsi).
+# $@ on entry = [kernel padded to KERNEL_SIZE][ubi rootfs]; we relocate it.
+define Build/nokia_xg-040g-md-factory
+	rm -f $@.factory
+	cat $(STAGING_DIR_IMAGE)/an7581_$(DEVICE_NAME)-bl2.fip > $@.factory
+	truncate -s 131072 $@.factory
+	cat $(STAGING_DIR_IMAGE)/an7581_$(DEVICE_NAME)-bl31-u-boot.fip >> $@.factory
+	truncate -s 786432 $@.factory
+	cat $@ >> $@.factory
+	mv $@.factory $@
+endef
+
 define Build/an7581-chainloader
   $(INSTALL_DIR) $(KDIR)/chainload-fit-$(notdir $@)
   @if [ -f "$(STAGING_DIR_IMAGE)/an7581_$1-u-boot.bin.lzma" ]; then \
@@ -154,10 +167,14 @@ define Device/nokia_xg-040g-md
   DEVICE_DTS_CONFIG := config@1
   IMAGE_SIZE := 131968k
   KERNEL_SIZE := 8192k
-  IMAGES += factory-kernel.bin factory-rootfs.bin
+  IMAGES += factory-kernel.bin factory-rootfs.bin factory.bin
   IMAGE/factory-kernel.bin := append-kernel
   IMAGE/factory-rootfs.bin := append-ubi | check-size
+  IMAGE/factory.bin := append-kernel | pad-to 8192k | append-ubi | nokia_xg-040g-md-factory
   IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+  ARTIFACT/preloader.bin := an7581-preloader nokia_xg-040g-md
+  ARTIFACT/bl31-uboot.fip := an7581-bl31-uboot nokia_xg-040g-md
+  ARTIFACTS := preloader.bin bl31-uboot.fip
 endef
 TARGET_DEVICES += nokia_xg-040g-md
 

@@ -5,6 +5,41 @@ define Device/FitImageLzma
   KERNEL_NAME := Image
 endef
 
+define Build/an7583-preloader
+  cat $(STAGING_DIR_IMAGE)/an7583_$1-bl2.fip >> $@
+endef
+
+define Build/an7583-bl31-uboot
+  cat $(STAGING_DIR_IMAGE)/an7583_$1-bl31-u-boot.fip >> $@
+endef
+
+define Build/an7583-chainloader
+  $(INSTALL_DIR) $(KDIR)/chainload-fit-$(notdir $@)
+  @if [ -f "$(STAGING_DIR_IMAGE)/an7583_$1-u-boot.bin.lzma" ]; then \
+    KERNEL="$(STAGING_DIR_IMAGE)/an7583_$1-u-boot.bin.lzma"; \
+    COMP="lzma"; \
+  else \
+    KERNEL="$(STAGING_DIR_IMAGE)/an7583_$1-u-boot.bin"; \
+    COMP="none"; \
+  fi; \
+  $(TOPDIR)/scripts/mkits.sh \
+    -D $(DEVICE_NAME) \
+    -o $(KDIR)/chainload-fit-$(notdir $@)/u-boot.its \
+    -k $$KERNEL \
+    -C $$COMP \
+    -a 0x80200000 -e 0x80200000 \
+    -c conf-uboot \
+    -A arm64 -v u-boot \
+    -d $(STAGING_DIR_IMAGE)/an7583_$1-u-boot.dtb \
+    -s 0x82000000
+  PATH=$(LINUX_DIR)/scripts/dtc:$(PATH) \
+    $(STAGING_DIR_HOST)/bin/mkimage \
+    -D "-i $(KDIR)/chainload-fit-$(notdir $@)" \
+    -f $(KDIR)/chainload-fit-$(notdir $@)/u-boot.its \
+    $(STAGING_DIR_IMAGE)/an7583_$1-chainload-u-boot.itb
+  cat $(STAGING_DIR_IMAGE)/an7583_$1-chainload-u-boot.itb >> $@
+endef
+
 define Device/airoha_an7583-evb
   $(call Device/FitImageLzma)
   DEVICE_VENDOR := Airoha
@@ -44,3 +79,25 @@ define Device/nokia_xg-040g-mf
   DEVICE_PACKAGES := kmod-phy-airoha-en8811h
 endef
 TARGET_DEVICES += nokia_xg-040g-mf
+
+define Device/nokia_xg-040g-mf-ubi
+  $(call Device/FitImageLzma)
+  DEVICE_VENDOR := Nokia
+  DEVICE_MODEL := XG-040G-MF
+  DEVICE_VARIANT := (UBI)
+  DEVICE_DTS := an7583-nokia_xg-040g-mf-ubi
+  UBOOTENV_IN_UBI := 1
+  KERNEL_IN_UBI := 1
+  KERNEL := kernel-bin | gzip
+  KERNEL_INITRAMFS := kernel-bin | lzma | \
+	fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb with-initrd | pad-to 128k
+  KERNEL_INITRAMFS_SUFFIX := -recovery.itb
+  IMAGES := sysupgrade.itb
+  IMAGE/sysupgrade.itb := append-kernel | \
+	fit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-static-with-rootfs | \
+	append-metadata
+  DEVICE_PACKAGES := kmod-phy-airoha-en8811h fitblk
+  ARTIFACTS := chainload-uboot.itb
+  ARTIFACT/chainload-uboot.itb := an7583-chainloader nokia_xg-040g-mf
+endef
+TARGET_DEVICES += nokia_xg-040g-mf-ubi

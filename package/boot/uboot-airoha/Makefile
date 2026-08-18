@@ -37,7 +37,7 @@ endef
 define U-Boot/an7581_nokia_xg-040g-md
   NAME:=Nokia XG-040G-MD
   UBOOT_CONFIG:=an7581_nokia_xg-040g-md
-  BUILD_DEVICES:=nokia_xg-040g-md-ubi
+  BUILD_DEVICES:=nokia_xg-040g-md nokia_xg-040g-md-ubi
   BUILD_SUBTARGET:=an7581
   UBOOT_IMAGE:=u-boot.fip
   BL2_IMAGE:=an7581-bl2.bin
@@ -52,6 +52,14 @@ define U-Boot/an7581_rfb
   UBOOT_IMAGE:=u-boot.fip
   BL2_IMAGE:=an7581-bl2.bin
   BL31_IMAGE:=an7581-bl31.bin
+endef
+
+define U-Boot/an7583_nokia_xg-040g-mf
+  NAME:=Nokia XG-040G-MF
+  UBOOT_CONFIG:=an7583_nokia_xg-040g-mf
+  BUILD_DEVICES:=nokia_xg-040g-mf-ubi
+  BUILD_SUBTARGET:=an7583
+  UBOOT_IMAGE:=u-boot.bin
 endef
 
 define U-Boot/an7583_rfb
@@ -79,6 +87,7 @@ UBOOT_TARGETS := \
 	an7581_nokia_valyrian \
 	an7581_nokia_xg-040g-md \
 	an7581_rfb \
+	an7583_nokia_xg-040g-mf \
 	an7583_rfb \
 	en7523_rfb
 

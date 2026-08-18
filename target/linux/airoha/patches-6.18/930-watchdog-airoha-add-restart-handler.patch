@@ -1,0 +1,92 @@
+From: Sisyphus <local@example.com>
+Date: Fri, 31 Jul 2026 00:00:00 +0800
+Subject: [PATCH] watchdog: airoha: add restart handler
+
+The Airoha EN7581/AN7583 SoCs use the stock carrier U-Boot/ATF which
+performs a warm (DDR-unretraining) reset when PSCI SYSTEM_RESET is
+invoked, causing boot failures (UBI attach corruption, kernel panic)
+after soft reboot on devices like the Nokia XG-040G-MF.
+
+The watchdog, on the other hand, drives the SoC through the full
+hardware reset path (the same one used at power-on), which correctly
+re-initializes the DDR controller.
+
+Register a restart handler that arms the watchdog with the shortest
+possible timeout, triggering an immediate hardware reset.
+
+The restart handler must preempt PSCI (priority 129): PSCI SYSTEM_RESET
+takes the bootloader's warm-reset path which does not re-train DDR,
+while the watchdog drives the full hardware reset path. The watchdog
+core defaults to priority 0 (last resort), which would never fire
+before PSCI.
+
+Signed-off-by: Sisyphus <local@example.com>
+---
+ drivers/watchdog/airoha_wdt.c | 27 +++++++++++++++++++++++++++
+ 1 file changed, 27 insertions(+)
+
+diff --git a/drivers/watchdog/airoha_wdt.c b/drivers/watchdog/airoha_wdt.c
+--- a/drivers/watchdog/airoha_wdt.c
++++ b/drivers/watchdog/airoha_wdt.c
+@@ -17,6 +17,7 @@
+ #include <linux/clk.h>
+ #include <linux/io.h>
+ #include <linux/math.h>
++#include <linux/delay.h>
+ #include <linux/of.h>
+ #include <linux/platform_device.h>
+ #include <linux/watchdog.h>
+@@ -89,6 +90,31 @@
+ 	return 0;
+ }
+ 
++static int airoha_wdt_restart(struct watchdog_device *wdog_dev,
++			      unsigned long action, void *data)
++{
++	struct airoha_wdt_desc *airoha_wdt = watchdog_get_drvdata(wdog_dev);
++	u32 val;
++
++	/* Arm the watchdog with the shortest possible timeout to
++	 * trigger an immediate SoC hardware reset.
++	 *
++	 * A plain watchdog timeout reset is used instead of PSCI
++	 * SYSTEM_RESET because the stock bootloader's warm reset path
++	 * does not re-train the DDR controller, which makes the system
++	 * fail to attach the UBI rootfs after a soft reboot.
++	 */
++	writel(0x1, airoha_wdt->base + WDT_TIMER_LOAD_VALUE);
++	val = readl(airoha_wdt->base + TIMER_CTRL);
++	val |= (WDT_TIMER_ENABLE | WDT_ENABLE | WDT_TIMER_INTERRUPT);
++	writel(val, airoha_wdt->base + TIMER_CTRL);
++
++	/* Wait for the reset to happen, or time out and report failure. */
++	mdelay(100);
++
++	return -ETIMEDOUT;
++}
++
+ static int airoha_wdt_set_timeout(struct watchdog_device *wdog_dev, unsigned int timeout)
+ {
+ 	wdog_dev->timeout = timeout;
+@@ -122,6 +148,7 @@
+ 	.ping = airoha_wdt_ping,
+ 	.set_timeout = airoha_wdt_set_timeout,
+ 	.get_timeleft = airoha_wdt_get_timeleft,
++	.restart = airoha_wdt_restart,
+ };
+ 
+ static int airoha_wdt_probe(struct platform_device *pdev)
+@@ -161,6 +188,13 @@
+ 	watchdog_set_nowayout(wdog_dev, nowayout);
+ 	watchdog_stop_on_unregister(wdog_dev);
+ 
++	/* Preempt PSCI (priority 129) on restart: the stock bootloader's
++	 * PSCI SYSTEM_RESET warm-reset path does not re-train DDR, which
++	 * makes the system crash after soft reboot. The watchdog drives
++	 * the SoC through the full hardware reset path instead.
++	 */
++	watchdog_set_restart_priority(wdog_dev, 255);
++
+ 	ret = devm_watchdog_register_device(dev, wdog_dev);
+ 	if (ret)
+ 		return ret;

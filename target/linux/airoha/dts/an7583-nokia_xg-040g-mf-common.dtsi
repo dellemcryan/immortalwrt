@@ -110,6 +110,10 @@
 	gpio-ranges = <&an7583_pinctrl 0 2 53>;
 
 	mdio0_pins: mdio0-pins {
+		mux {
+			function = "mdio";
+			groups = "mdio";
+		};
 		conf {
 			pins = "mdio_0";
 			output-high;
@@ -167,7 +171,7 @@
 
 		reset-gpios = <&an7583_pinctrl 34 GPIO_ACTIVE_LOW>;
 		reset-assert-us = <10000>;
-		reset-deassert-us = <20000>;
+		reset-deassert-us = <50000>;
 
 		leds {
 			#address-cells = <1>;
@@ -244,7 +248,7 @@
 &gdm3 {
 	status = "okay";
 
-	openwrt,netdev-name = "lan1";
+	openwrt,netdev-name = "wan";
 
 	phy-handle = <&en8811>;
 	phy-mode = "2500base-x";
